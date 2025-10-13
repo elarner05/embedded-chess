@@ -49,25 +49,6 @@ void similarPieces(Ply previousPly, Square targetSquare, Piece targetType, Piece
   game.castleAlert = castleBefore;
 }
 
-// Generates a optimized snapshot of the given position, used for three-fold repetition
-struct Position generatePosition(Ply previousPly, Piece board[8][8], bool turn) {
-
-  struct Position newPosition = { 0 };
-  for (int y = 0;y<8;y++) {
-    newPosition.rows[y].a = board[y][0];
-    newPosition.rows[y].b = board[y][1];
-    newPosition.rows[y].c = board[y][2];
-    newPosition.rows[y].d = board[y][3];
-    newPosition.rows[y].e = board[y][4];
-    newPosition.rows[y].f = board[y][5];
-    newPosition.rows[y].g = board[y][6];
-    newPosition.rows[y].h = board[y][7];
-  }
-  newPosition.availableMoves = countAllPossibleMoves(previousPly, turn, board);
-  newPosition.turn = turn;
-
-  return newPosition;
-}
 
 
 // Big notation function, implementing all the complex rules of chess notation (castling, en passant, minimal move disambiguation)
@@ -131,7 +112,7 @@ void updateNotation() {
       continue;
     }
 
-    if (plyIndex > notation.currentPlyNumber-1 && !checkForDraw(lastPly, notationBoard)) { // Break if reached last move and game has not ended
+    if (plyIndex > notation.currentPlyNumber-1 && !checkForDraw(lastPly, game.turn, notationBoard)) { // Break if reached last move and game has not ended
       break;
     }
 
@@ -235,12 +216,12 @@ void updateNotation() {
     currentCol+=drawCharacter(currentCol, currentRow, NOTATION_FRONT, ASCII::CHAR_DOT) + 1;
 
     if (plyIndex > notation.currentPlyNumber-1) {// Add draw symbol if state is draw
-      if (checkForCheckmate(lastPly, notationBoard)) {
+      if (checkForCheckmate(lastPly, game.turn, notationBoard)) {
         ASCII plyChars[9] = {ASCII::CHAR_0, ASCII::CHAR_MINUS, ASCII::CHAR_1, ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL}; // 0-1
         for (uint8_t i = 0;i<3;i++) {
           currentCol += drawCharacter(currentCol, currentRow, NOTATION_FRONT, plyChars[i]) + 1;
         }
-      } else if (checkForDraw(lastPly, notationBoard)) {
+      } else if (checkForDraw(lastPly, game.turn, notationBoard)) {
         ASCII plyChars[9] = {ASCII::CHAR_1, ASCII::CHAR_FORWARD_SLASH, ASCII::CHAR_2, ASCII::CHAR_MINUS, ASCII::CHAR_1, ASCII::CHAR_FORWARD_SLASH, ASCII::CHAR_2, ASCII::CHAR_NULL,ASCII::CHAR_NULL};
         for (uint8_t i = 0;i<7;i++) {
           currentCol += drawCharacter(currentCol, currentRow, NOTATION_FRONT, plyChars[i]) + 1;
@@ -344,7 +325,7 @@ void updateNotation() {
     game.turn = (game.turn == 0) ? 1 : 0;
 
     // Add check as required
-    if (checkForCheckmate(lastPly, notationBoard)) {
+    if (checkForCheckmate(lastPly, game.turn, notationBoard)) {
       plyChars[plyCharsIndex] =  ASCII::CHAR_HASH;plyCharsIndex++; // #
     } else if (checkForCheck(lastPly, notationBoard)) {
       plyChars[plyCharsIndex] =  ASCII::CHAR_PLUS;plyCharsIndex++; // +
@@ -362,12 +343,12 @@ void updateNotation() {
     currentCol = 48;
 
     if (plyIndex+1 > notation.currentPlyNumber-1) {// Add draw symbol if state is draw
-      if (checkForCheckmate(lastPly, notationBoard)) {
+      if (checkForCheckmate(lastPly, game.turn, notationBoard)) {
         ASCII plyChars[9] = {ASCII::CHAR_1,ASCII::CHAR_MINUS,ASCII::CHAR_0,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL,ASCII::CHAR_NULL};
         for (uint8_t i = 0;i<3;i++) {
           currentCol += drawCharacter(currentCol, currentRow, NOTATION_FRONT, plyChars[i]) + 1;
         }
-      } else if (checkForDraw(lastPly, notationBoard)) {
+      } else if (checkForDraw(lastPly, game.turn, notationBoard)) {
         ASCII plyChars[9] = {ASCII::CHAR_1,ASCII::CHAR_FORWARD_SLASH,ASCII::CHAR_2,ASCII::CHAR_MINUS,ASCII::CHAR_1,ASCII::CHAR_FORWARD_SLASH,ASCII::CHAR_2,ASCII::CHAR_NULL,ASCII::CHAR_NULL};
         for (uint8_t i = 0;i<7;i++) {
           currentCol += drawCharacter(currentCol, currentRow, NOTATION_FRONT, plyChars[i]) + 1;
@@ -471,7 +452,7 @@ void updateNotation() {
     game.turn = (game.turn == 0) ? 1 : 0;
 
     // Add check as required
-    if (checkForCheckmate(lastPly, notationBoard)) {
+    if (checkForCheckmate(lastPly, game.turn, notationBoard)) {
       plyChars[plyCharsIndex] = ASCII::CHAR_HASH;plyCharsIndex++; // #
     } else if (checkForCheck(lastPly, notationBoard)) {
       plyChars[plyCharsIndex] = ASCII::CHAR_PLUS;plyCharsIndex++; // +

@@ -6,7 +6,6 @@
     TODO:
 
   Button navigation
-  Adding a move that symbolises a draw "state"
   Display wins and draws in the notation
   Draw by insufficient material
   50-move rule
@@ -203,7 +202,7 @@ void loop() {
         } else if (game.selectingPiece) {  //----- First press on screen
           Serial.println("Selecting piece = true");
           printBoard(game.board);
-          if (checkForGameOver(game.previousPly, game.board)) {
+          if (checkForGameOver(game.previousPly, game.turn, game.board)) {
             // Game over?
           } else if (((game.board[sy][sx] < BPAWN && game.turn == 0) || (game.board[sy][sx] > WKING && game.turn == 1))) {
             game.selectedPly.from.x = sx;

@@ -6,6 +6,8 @@
 #include <Arduino.h>
 
 
+constexpr uint8_t THREE_FOLD_REPETITION_MAX_PLY = 100;
+
 // Assign human-readable names to some common 16-bit color values:
 enum Color : uint16_t {
   BLACK = 0x0000,
@@ -101,3 +103,59 @@ struct Move {
   struct Ply black;
 };
 
+// struct _PackedRow {
+//   byte a : 4;
+//   byte b : 4;
+//   byte c : 4;
+//   byte d : 4;
+//   byte e : 4;
+//   byte f : 4;
+//   byte g : 4;
+//   byte h : 4;
+// };
+// // Stores a snapshot of the chess board, used for checking three-fold repetition
+// // Only 100 previous positions need stored, due to the fifty-move rule
+// // Will use ~3.4kB, a large memory spend but within budget
+// struct Position {
+//   _PackedRow rows[8];
+//   byte availableMoves : 8; // Instead of storing castling / enpassant rights, we store the number of available moves, as this will change depending on those rights
+//   byte turn : 1;
+//   byte : 7;
+// };
+
+// Stores all variables relating to the current game state 
+struct GameState {
+  bool turn; // 0 = white, 1 = black
+
+  // 2D array that stored the postions of pieces
+  Piece board[8][8];
+
+  // Copy of board used in move validation
+  Piece hypotheticalBoard[8][8];
+
+  struct Ply selectedPly; // Coords for both squares for the current half-move
+  struct Ply previousPly; // Coords for both squares for the last half-move
+
+  //                               white          black
+  // Rook movement flags         left  right   left  right
+  //                               0     1       2     3
+  bool rookMovementFlags[4];
+
+  // King-movement flags, used to check castling validity
+  bool whiteKingHasMoved;
+  bool blackKingHasMoved;
+
+  bool castleAlert;  // Flag for the "castle" move
+  bool passantAlert; // Flag for the "en passant" move
+
+  // Clock for use in 50 move rule; 50 moves reached when clock reaches 100
+  uint8_t plyClock;
+
+  bool selectingPiece;   // true for the first press, false for the second press
+  bool promotingPiece;   // Promotion menu activity indicator
+  bool cancelPromotion;  // Flag to cancel the promotion menu
+
+  // Storage for last 100 position states, to check three-fold repetition
+  uint64_t lastHashs[THREE_FOLD_REPETITION_MAX_PLY];
+  uint8_t currentPosition;
+};

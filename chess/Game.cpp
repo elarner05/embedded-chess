@@ -47,6 +47,11 @@ void initGameState() {
   game.promotingPiece = false;    // Promotion menu activity indicator
   game.cancelPromotion = false;  // Flag to cancel the promotion menu
 
+  memset(game.lastHashs, 0, sizeof(game.lastHashs)); // sets the 100 position storage to 0
+  game.currentPosition = 0;                                  // points to the first position slot
+
+  game.lastHashs[game.currentPosition] = generateZobristHash(game, (uint64_t)countAllPossibleMoves(game.previousPly, game.turn, game.board));
+  game.currentPosition++;
 }
 
 // Check if the move just played was a promotion
@@ -93,14 +98,20 @@ void handleMove() {
     // Update plyClock
     if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN || !(game.board[game.selectedPly.to.y][game.selectedPly.to.x] == BLANK_SPACE)) {
       game.plyClock = 0;
+      resetPositionStorage(game);
     } else {
       game.plyClock++;
     }
-
+    
+    // Move the piece
     game.board[game.selectedPly.to.y][game.selectedPly.to.x] = game.board[game.selectedPly.from.y][game.selectedPly.from.x];
     game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BLANK_SPACE;
 
-
+    // Add position state to the storage
+    if (game.currentPosition < THREE_FOLD_REPETITION_MAX_PLY) { // make sure we do not go out of bounds due to logic error with 50 move rule
+      game.lastHashs[game.currentPosition] = generateZobristHash(game, countAllPossibleMoves(game.previousPly, game.turn, game.board));
+      game.currentPosition++;
+    } 
 
     if (game.passantAlert == true) {
       game.passantAlert = false;
@@ -769,10 +780,56 @@ uint8_t countAllPossibleMoves(Ply previousPly, bool turn, Piece board[8][8]) {
 }
 
 
-// Test the board for checkmate, draw, and both
-bool checkForCheckmate(Ply lastPly, Piece board[8][8]) {
+// // Generates a optimized snapshot of the given position, used for three-fold repetition
+// struct Position generatePosition(Ply previousPly, Piece board[8][8], bool turn) {
 
-  if (countAllPossibleMoves(lastPly, game.turn, board) == 0 && checkForCheck(lastPly, board)) {
+//   struct Position newPosition = { 0 };
+//   for (int y = 0;y<8;y++) {
+//     newPosition.rows[y].a = board[y][0];
+//     newPosition.rows[y].b = board[y][1];
+//     newPosition.rows[y].c = board[y][2];
+//     newPosition.rows[y].d = board[y][3];
+//     newPosition.rows[y].e = board[y][4];
+//     newPosition.rows[y].f = board[y][5];
+//     newPosition.rows[y].g = board[y][6];
+//     newPosition.rows[y].h = board[y][7];
+//   }
+//   newPosition.availableMoves = countAllPossibleMoves(previousPly, turn, board);
+//   newPosition.turn = turn;
+
+//   return newPosition;
+// }
+
+// Resets the position storage for the gamestate instance
+void resetPositionStorage(struct GameState &gameState) {
+  memset(gameState.lastHashs, 0, sizeof(gameState.lastHashs)); // sets the 100 position storage to 0
+  gameState.currentPosition = 0;                                  // points to the first position slot
+}
+
+// Checks the stored positions for positions that occur three times
+bool checkForThreeFoldRepetition(const struct GameState &gameState) {
+  for (int i = 0; i < gameState.currentPosition-1; i++) {
+    int occurences = 1;
+    
+
+    for (int j = i+1; j < gameState.currentPosition;j++) {
+      if (memcmp(&gameState.lastHashs[i], &gameState.lastHashs[j], sizeof(uint64_t)) == 0) {
+        occurences++;
+      }
+    }
+
+    if (occurences >= 3) {
+      return true;
+    }
+  }
+
+  return false; // return false if no repetition found
+}
+
+// Test the board for checkmate, draw, and both
+bool checkForCheckmate(Ply lastPly, bool turn, Piece board[8][8]) {
+
+  if (countAllPossibleMoves(lastPly, turn, board) == 0 && checkForCheck(lastPly, board)) {
     return true;
   }
   return false;
@@ -841,7 +898,7 @@ bool checkForInsufficientMaterial(Piece board[8][8]) {
     return true;
   }
 
-  // Case 3: King + Bishop vs King + Bishop (same color bishops)
+  // Case 3: King + Bishop vs King + Bishop (same color bishops)    |              same color check                  |
   if (whiteBishop && blackBishop && !whiteKnight && !blackKnight && (whiteSquareWhiteBishop == whiteSquareBlackBishop)) {
     return true;
   }
@@ -854,20 +911,28 @@ bool check50MoveRule(GameState gameState) {
   }
   return false;
 }
-bool checkForDraw(Ply lastPly, Piece board[8][8]) {
-  if (countAllPossibleMoves(lastPly, game.turn, board) == 0) {
+bool checkForDraw(Ply lastPly, bool turn, Piece board[8][8]) {
+  if (countAllPossibleMoves(lastPly, turn, board) == 0) {
     return true;
   } 
 
+  if (checkForInsufficientMaterial(board)) {
+    return true;
+  }
+
   if (check50MoveRule(game)) {
+    return true;
+  }
+
+  if (checkForThreeFoldRepetition(game)) {
     return true;
   }
   
   // three-fold repetition should be added
   return false;
 }
-bool checkForGameOver(Ply lastPly, Piece board[8][8]) {
-  if (checkForDraw(lastPly, board) || checkForCheckmate(lastPly, board)) {
+bool checkForGameOver(Ply lastPly, bool turn, Piece board[8][8]) {
+  if (checkForDraw(lastPly, turn, board) || checkForCheckmate(lastPly, turn, board)) {
     return true;
   }
   return false;
