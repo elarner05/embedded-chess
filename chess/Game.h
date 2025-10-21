@@ -45,24 +45,26 @@ extern struct GameState game; // Global game state
 
 void initGameState();
 
-bool checkAttemptedPromotion();
-void handleMove();
+bool checkAttemptedPromotion(struct GameState &game);
+void handleMove(struct GameState &game);
 bool validMove(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]);
-bool checkForCheck(Ply previousPly, Piece board[8][8]);
+bool inBounds(int8_t x, int8_t y);
+bool isEnemy(Piece p, bool turn);
+bool checkForCheck(struct GameState &game);
+bool checkForCheckAfterPly(const struct Ply ply, struct GameState &game);
 bool validMoveWithoutCheck(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]);
-void updateHypothetical(Piece from[8][8]);
+// void updateHypothetical(Piece from[8][8]);
 void fillBoard(Piece from[8][8]);
 struct Square findKing(Piece board[8][8]);
 uint8_t countPossibleMoves(Ply previousPly, Ply selectedPly, Piece board[8][8]);
-uint8_t countAllPossibleMoves(Ply previousPly, bool turn, Piece board[8][8]);
+uint8_t countAllPossibleMoves(struct GameState &game);
 
-struct Position generatePosition(Ply previousPly, Piece board[8][8], bool turn);
-void resetPositionStorage(struct GameState &game);
+void resetHashStorage(struct GameState &game);
 bool checkForThreeFoldRepetition(const struct GameState &game);
-bool checkForCheckmate(Ply lastPly,  bool turn, Piece board[8][8]);
-bool checkForInsufficientMaterial(Piece board[8][8]);
-bool check50MoveRule(GameState gameState);                  
-bool checkForDraw(Ply lastPly, bool turn, Piece board[8][8]);
-bool checkForGameOver(Ply lastPly,  bool turn, Piece board[8][8]);
+bool checkForCheckmate(struct GameState &game);
+bool checkForInsufficientMaterial(const struct GameState &game);
+bool check50MoveRule(const struct GameState &game);                  
+bool checkForDraw(struct GameState &game);
+bool checkForGameOver(struct GameState &game);
 void playMove(Ply ply, Piece from[8][8]);
 void printBoard(Piece board[8][8]);

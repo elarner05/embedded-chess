@@ -39,5 +39,5 @@ extern struct NotationState notation;
 
 
 void initNotationState();
-void similarPieces(Ply previousPly, Square targetSquare, Piece targetType, Piece board[8][8], Square squares[9]);
+void similarPieces(struct GameState &game, Square targetSquare, Piece targetType, Square dst[9]);
 void updateNotation();

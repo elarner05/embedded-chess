@@ -131,7 +131,7 @@ struct GameState {
   Piece board[8][8];
 
   // Copy of board used in move validation
-  Piece hypotheticalBoard[8][8];
+  // Piece hypotheticalBoard[8][8];
 
   struct Ply selectedPly; // Coords for both squares for the current half-move
   struct Ply previousPly; // Coords for both squares for the last half-move
@@ -142,6 +142,7 @@ struct GameState {
   bool rookMovementFlags[4];
 
   // King-movement flags, used to check castling validity
+  struct Square kingSquares[2];
   bool whiteKingHasMoved;
   bool blackKingHasMoved;
 

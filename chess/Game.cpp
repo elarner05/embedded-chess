@@ -20,7 +20,7 @@ void initGameState() {
   game.turn = 0;
 
   fillBoard(game.board);
-  fillBoard(game.hypotheticalBoard);
+  // fillBoard(game.hypotheticalBoard);
 
   struct Ply selectedPly = { { 0, 0, 0 }, { 0, 0, 0 } };  // Coords for both squares for the current half-move
   struct Ply previousPly = { { 0, 0, 0 }, { 0, 0, 0 } };  // Coords for both squares for the last half-move
@@ -33,6 +33,10 @@ void initGameState() {
   for (int i=0; i<4; i++) {
     game.rookMovementFlags[i] = false;
   }
+
+  //            white          |             black
+
+  game.kingSquares[0] = {7,4,0}; game.kingSquares[1] = {0,4,0};
 
   // King-movement flags, used to check castling validity
   game.whiteKingHasMoved = false;
@@ -50,25 +54,25 @@ void initGameState() {
   memset(game.lastHashs, 0, sizeof(game.lastHashs)); // sets the 100 position storage to 0
   game.currentPosition = 0;                                  // points to the first position slot
 
-  game.lastHashs[game.currentPosition] = generateZobristHash(game, (uint64_t)countAllPossibleMoves(game.previousPly, game.turn, game.board));
+  game.lastHashs[game.currentPosition] = generateZobristHash(game, (uint64_t)countAllPossibleMoves(game));
   game.currentPosition++;
 }
 
 // Check if the move just played was a promotion
-bool checkAttemptedPromotion() {
+bool checkAttemptedPromotion(struct GameState &game) {
   return (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN && game.selectedPly.to.y == 0) || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN && game.selectedPly.to.y == 7);
 }
 
 
 
 // The handle move logic, which runs after the second square is pressed
-void handleMove() {
+void handleMove(struct GameState &game) {
   Color color;
 
   if (!game.cancelPromotion) {
     //Check if previously was in check and save location if so
     struct Square prevKingLocation = {0,0,3};
-    if (checkForCheck(game.previousPly, game.board)) {
+    if (checkForCheck(game)) {
       prevKingLocation = findKing(game.board);
     }
 
@@ -94,11 +98,18 @@ void handleMove() {
     } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING && game.selectedPly.from.x == 4 && game.selectedPly.from.y == 0) {
       game.blackKingHasMoved = true;
     }
+    if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING) {
+      game.kingSquares[0].x = game.selectedPly.to.x;
+      game.kingSquares[0].y = game.selectedPly.to.y;
+    } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING) {
+      game.kingSquares[1].x = game.selectedPly.to.x;
+      game.kingSquares[1].y = game.selectedPly.to.y;
+    }
 
     // Update plyClock
     if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN || !(game.board[game.selectedPly.to.y][game.selectedPly.to.x] == BLANK_SPACE)) {
       game.plyClock = 0;
-      resetPositionStorage(game);
+      resetHashStorage(game);
     } else {
       game.plyClock++;
     }
@@ -109,7 +120,7 @@ void handleMove() {
 
     // Add position state to the storage
     if (game.currentPosition < THREE_FOLD_REPETITION_MAX_PLY) { // make sure we do not go out of bounds due to logic error with 50 move rule
-      game.lastHashs[game.currentPosition] = generateZobristHash(game, countAllPossibleMoves(game.previousPly, game.turn, game.board));
+      game.lastHashs[game.currentPosition] = generateZobristHash(game, countAllPossibleMoves(game));
       game.currentPosition++;
     } 
 
@@ -193,7 +204,7 @@ void handleMove() {
     
 
     // Add red effect if in 'check'
-    if (checkForCheck(game.previousPly, game.board)) {
+    if (checkForCheck(game)) {
       struct Square kingLocation = findKing(game.board);
 
       tft.fillRect(BOARD_BUFFER + (kingLocation.x) * SQUARE_SIZE, (kingLocation.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, RED);
@@ -411,308 +422,411 @@ bool validMove(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8
 
 
   if (game.castleAlert) {
-    if (checkForCheck(previousPly, board)) { return false; }  // starts in check
+    if (checkForCheck(game)) { game.castleAlert = false; return false; }  // starts in check
     if (x1 - x2 > 0) {
-      updateHypothetical(board);
-      game.hypotheticalBoard[y2][x2 + 1] = game.hypotheticalBoard[y1][x1];
-      game.hypotheticalBoard[y1][x1] = BLANK_SPACE;
-      if (checkForCheck(previousPly, game.hypotheticalBoard)) { return false; }  /// passes through check
+      struct Ply ply = {{x1, y1, 0}, {x2+1, y2, 0}};
+      if (checkForCheckAfterPly(ply, game)) {game.castleAlert = false;return false;}  /// passes through check
     } else if (x1 - x2 < 0) {
-      updateHypothetical(board);
-      game.hypotheticalBoard[y2][x2 - 1] = game.hypotheticalBoard[y1][x1];
-      game.hypotheticalBoard[y1][x1] = BLANK_SPACE;
-      if (checkForCheck(previousPly, game.hypotheticalBoard)) { return false; }
+      struct Ply ply = {{x1, y1, 0}, {x2-1, y2, 0}};
+      if (checkForCheckAfterPly(ply, game)) {game.castleAlert = false;return false;}  /// passes through check
     }
   }
-  updateHypothetical(board);
 
-  //memcpy(game.hypotheticalBoard, board, 8);
-  game.hypotheticalBoard[y2][x2] = game.hypotheticalBoard[y1][x1];
-  game.hypotheticalBoard[y1][x1] = BLANK_SPACE;
-  if (game.passantAlert == true) {
-    game.hypotheticalBoard[previousPly.to.y][previousPly.to.x] = BLANK_SPACE;
+  struct Ply move = {{x1, y1, 0}, {x2, y2, 0}};
+  if (checkForCheckAfterPly(move, game)) {
+
+    return false;
   }
+  // updateHypothetical(board);
+
+  // //memcpy(game.hypotheticalBoard, board, 8);
+  // game.hypotheticalBoard[y2][x2] = game.hypotheticalBoard[y1][x1];
+  // game.hypotheticalBoard[y1][x1] = BLANK_SPACE;
+  // if (game.passantAlert == true) {
+  //   game.hypotheticalBoard[previousPly.to.y][previousPly.to.x] = BLANK_SPACE;
+  // }
 
 
 
-  int kx = 0;
-  int ky = 0;
+  // int kx = 0;
+  // int ky = 0;
 
-  if (game.hypotheticalBoard[y2][x2] < BPAWN) {
+  // if (game.hypotheticalBoard[y2][x2] < BPAWN) {
 
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
+  //   for (int y = 0; y < 8; y++) {
+  //     for (int x = 0; x < 8; x++) {
 
-        if (game.hypotheticalBoard[y][x] == WKING) {  // locate king
-          kx = x;
-          ky = y;
-        }
-      }  //                                                             WHITE
-    }
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] > WKING) {
-          if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
-            game.passantAlert = false;
-            game.castleAlert = false;
-            return false;
-          }
-        }
-      }
-    }
-  } else {
+  //       if (game.hypotheticalBoard[y][x] == WKING) {  // locate king
+  //         kx = x;
+  //         ky = y;
+  //       }
+  //     }  //                                                             WHITE
+  //   }
+  //   for (int y = 0; y < 8; y++) {
+  //     for (int x = 0; x < 8; x++) {
+  //       if (game.hypotheticalBoard[y][x] > WKING) {
+  //         if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
+  //           game.passantAlert = false;
+  //           game.castleAlert = false;
+  //           return false;
+  //         }
+  //       }
+  //     }
+  //   }
+  // } else {
 
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] == BKING) {  // locate king
-          kx = x;
-          ky = y;
-        }
-      }  //                                                             BLACK
-    }
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] < BKING) {
-          if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
-            game.passantAlert = false;
-            game.castleAlert = false;
-            return false;
-          }
-        }
-      }
-    }
-  }
+  //   for (int y = 0; y < 8; y++) {
+  //     for (int x = 0; x < 8; x++) {
+  //       if (game.hypotheticalBoard[y][x] == BKING) {  // locate king
+  //         kx = x;
+  //         ky = y;
+  //       }
+  //     }  //                                                             BLACK
+  //   }
+  //   for (int y = 0; y < 8; y++) {
+  //     for (int x = 0; x < 8; x++) {
+  //       if (game.hypotheticalBoard[y][x] < BKING) {
+  //         if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
+  //           game.passantAlert = false;
+  //           game.castleAlert = false;
+  //           return false;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
 
 
   return true;  // return true if all checks say the move could be valid
 }
 
-// Checks if the king is in check and if so, updates the "game.castleAlert" flag as relevant
-bool checkForCheck(Ply previousPly, Piece board[8][8]) {
-  updateHypothetical(board);
-  int kx = 0;
-  int ky = 0;
+// // Checks if the king is in check and if so, updates the "game.castleAlert" flag as relevant
+// bool checkForCheck(struct GameState &game) {
+//   updateHypothetical(game.board);
+//   int kx = 0;
+//   int ky = 0;
 
-  if (game.turn == 0) {
+//   if (game.turn == 0) {
 
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
+//     for (int y = 0; y < 8; y++) {
+//       for (int x = 0; x < 8; x++) {
 
-        if (game.hypotheticalBoard[y][x] == WKING) {  // locate king
-          kx = x;
-          ky = y;
-        }
-      }  //                                                             WHITE
-    }
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] > WKING) {
-          if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
-            game.castleAlert = false;
-            return true;
-          }
-        }
+//         if (game.hypotheticalBoard[y][x] == WKING) {  // locate king
+//           kx = x;
+//           ky = y;
+//         }
+//       }  //                                                             WHITE
+//     }
+//     for (int y = 0; y < 8; y++) {
+//       for (int x = 0; x < 8; x++) {
+//         if (game.hypotheticalBoard[y][x] > WKING) {
+//           if (validMoveWithoutCheck(x, y, kx, ky, game.previousPly, game.hypotheticalBoard)) {
+//             game.castleAlert = false;
+//             return true;
+//           }
+//         }
+//       }
+//     }
+//   } else {
+
+//     for (int y = 0; y < 8; y++) {
+//       for (int x = 0; x < 8; x++) {
+//         if (game.hypotheticalBoard[y][x] == BKING) {  // locate king
+//           kx = x;
+//           ky = y;
+//         }
+//       }  //                                                             BLACK
+//     }
+
+//     for (int y = 0; y < 8; y++) {
+//       for (int x = 0; x < 8; x++) {
+//         if (game.hypotheticalBoard[y][x] < BKING) {
+//           if (validMoveWithoutCheck(x, y, kx, ky, game.previousPly, game.hypotheticalBoard)) {
+//             game.castleAlert = false;
+//             return true;
+//           }
+//         }
+//       }
+//     }
+//   }
+//   return false;
+// }
+
+inline bool inBounds(int8_t x, int8_t y) {
+  return (x >= 0 && x <= 7 && y >= 0 && y <= 7);
+}
+inline bool isEnemy(Piece p, bool turn) {
+  return (!turn && p < BPAWN && p != BLANK_SPACE) || (turn && p > WKING);
+}
+
+bool checkForCheck(struct GameState &game) {
+  int kx, ky;
+  if (game.turn) {kx=game.kingSquares[1].x;ky=game.kingSquares[1].y;} else {kx=game.kingSquares[0].x;ky=game.kingSquares[0].y;}
+  
+  const int dirs[8][2] = {
+  {1, 0}, {-1, 0}, {0, 1}, {0, -1},  // rook directions
+  {1, 1}, {1, -1}, {-1, 1}, {-1, -1} // bishop directions
+  };
+  // sliding directions
+  for (int d = 0; d < 8; d++) {
+    int dx = dirs[d][0], dy = dirs[d][1];
+    for (int x = kx + dx, y = ky + dy; inBounds(x, y); x += dx, y += dy) {
+      Piece p = game.board[y][x];
+      if (p == BLANK_SPACE) continue;
+
+      if (isEnemy(p, game.turn)) {
+        if ((d < 4 && (p == WROOK || p == WQUEEN || p == BROOK || p == BQUEEN)) || (d >= 4 && (p == WBISHOP || p == WQUEEN || p == BBISHOP || p == BQUEEN)))
+          return true;
       }
-    }
-  } else {
-
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] == BKING) {  // locate king
-          kx = x;
-          ky = y;
-        }
-      }  //                                                             BLACK
-    }
-
-    for (int y = 0; y < 8; y++) {
-      for (int x = 0; x < 8; x++) {
-        if (game.hypotheticalBoard[y][x] < BKING) {
-          if (validMoveWithoutCheck(x, y, kx, ky, previousPly, game.hypotheticalBoard)) {
-            game.castleAlert = false;
-            return true;
-          }
-        }
-      }
+      break; // blocked by any piece
     }
   }
+
+  // 2. Knights
+  const int knightMoves[8][2] = {
+      {1,2},{2,1},{-1,2},{-2,1},{1,-2},{2,-1},{-1,-2},{-2,-1}
+  };
+  for (auto &m : knightMoves) {
+    if (inBounds(kx+m[0], ky+m[1]) && isEnemy(game.board[ky+m[1]][kx+m[0]], game.turn) && (game.board[ky+m[1]][kx+m[0]] == WKNIGHT || game.board[ky+m[1]][kx+m[0]] == BKNIGHT))
+      return true;
+  }
+  // 3. Pawns
+  int8_t dir = game.turn ? 1 : -1;
+  if (inBounds(kx-1, ky+dir) && isEnemy(game.board[ky+dir][kx-1], game.turn) && (game.board[ky+dir][kx-1] == WPAWN || game.board[ky+dir][kx-1] == BPAWN))
+    return true;
+  if (inBounds(kx+1, ky+dir) && isEnemy(game.board[ky+dir][kx+1], game.turn) && (game.board[ky+dir][kx+1] == WPAWN || game.board[ky+dir][kx+1] == BPAWN))
+    return true;
+
+  // 4. Opponent king (adjacent squares)
+  for (int y = ky-1; y <= ky+1; y++)
+    for (int x = kx-1; x <= kx+1; x++)
+      if (inBounds(x, y) && isEnemy(game.board[y][x], game.turn) && (game.board[y][x] == WKING || game.board[y][x] == BKING))
+        return true;
+
   return false;
 }
 
-// Checks if the move is valid, without checking if the king is in "check"
-bool validMoveWithoutCheck(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]) {  //                             VALIDATE                    MOVE
-  //                                            ^ en passant ^
-  // Initial checks                   |--------------------------------(WHITE)-------------------------------------|      |---------------------------(BLACK)------------------------------|
-  // |-check if first space blank-|   |->                                                                   <-(check if own capture)->                                                   <-|
-  //   check if first space blank                                                                      check if own capture
-  if (board[y1][x1] == BLANK_SPACE || (board[y1][x1] < BPAWN && board[y2][x2] < BPAWN && board[y2][x2] > BLANK_SPACE) || (board[y1][x1] > WKING && board[y2][x2] > WKING)) { return false; }
+// Move a piece and check for check; does not check validity of ply; does not check castling or promotion properly as these should not affect whether the position is check or not
+bool checkForCheckAfterPly(const struct Ply ply, struct GameState &game) {
+    Piece fromPiece = game.board[ply.from.y][ply.from.x];
+    Piece toPiece = game.board[ply.to.y][ply.to.x];
 
-  // check if move is valid normally
-  Piece id = board[y1][x1];
+    if (game.passantAlert) {
+      game.board[game.previousPly.to.y][game.previousPly.to.x] = BLANK_SPACE;
+    }
 
-  if (id == WPAWN) {
-    // The pawn has loads of move rules (e.g. en passant, first square 2 move rule, NO captures forwards...)
-    if (((x1 == x2) && y2 + 1 == y1 && board[y1 - 1][x1] == BLANK_SPACE || (y1 == 6 && ((y2 + 2 == y1 && board[y1 - 1][x1] == BLANK_SPACE && board[y1 - 2][x1] == BLANK_SPACE) || y2 + 1 == y1 && board[y1 - 1][x1] == BLANK_SPACE)) && (x1 == x2)) || (abs(x1 - x2) == 1 && y2 + 1 == y1 && board[y2][x2] > WKING)) {
-    } else if (
-      abs(x1 - x2) == 1 && y2 + 1 == y1 && y1 == 3 /*&& board[y2+1][x2] > WKING*/ && previousPly.from.y == 1 && previousPly.to.x == x2 && previousPly.to.y == 3 && board[previousPly.to.y][previousPly.to.x] == BPAWN) {
-      game.passantAlert = true;
-    } else {
-      return false;
+    // If the moved piece is a king, update its position (since checkForCheck uses it)
+    int oldKx = -1, oldKy = -1;
+    if (fromPiece == WKING) {
+        oldKx = game.kingSquares[0].x;
+        oldKy = game.kingSquares[0].y;
+        game.kingSquares[0] = { ply.to.x, ply.to.y };
+    } else if (fromPiece == BKING) {
+        oldKx = game.kingSquares[1].x;
+        oldKy = game.kingSquares[1].y;
+        game.kingSquares[1] = { ply.to.x, ply.to.y };
     }
 
 
-  } else if (id == BPAWN) {
-    // The pawn has loads of move rules (e.g. en passant, first square 2 move rule, NO captures forwards...)
-    if (((x1 == x2) && y2 - 1 == y1 && board[y1 + 1][x1] == BLANK_SPACE || (y1 == 1 && ((y2 - 2 == y1 && board[y1 + 1][x1] == BLANK_SPACE && board[y1 + 2][x1] == BLANK_SPACE) || y2 - 1 == y1 && board[y1 + 1][x1] == BLANK_SPACE)) && (x1 == x2)) || (abs(x1 - x2) == 1 && y2 - 1 == y1 && board[y2][x2] < BPAWN && board[y2][x2] > BLANK_SPACE)) {
-    } else if (
-      abs(x1 - x2) == 1 && y2 - 1 == y1 && y1 == 4 && previousPly.from.y == 6 && previousPly.to.x == x2 && previousPly.to.y == 4 && board[previousPly.to.y][previousPly.to.x] == WPAWN) {
-      game.passantAlert = true;
-    } else {
-      return false;
-    }
+    game.board[ply.to.y][ply.to.x] = fromPiece;
+    game.board[ply.from.y][ply.from.x] = BLANK_SPACE;
 
-  } else if (id == WKNIGHT || id == BKNIGHT) {
+    bool inCheck = checkForCheck(game);
 
-    // Knights move by changing x or y by positive or negative 1 and 2
-    // 8 possibilitites: (x+1, y+2)  (x+2, y+1)  (x-1, y-2)  (x-2, y-1)  (x+1, y-2)  (x-2, y+1)  (x-1, y+2)  (x+2, y-1)
-    //               1                              2                              3                              4                              5                              6                              7                              8
-    if ((x1 + 1 == x2 && y1 + 2 == y2) || (x1 + 2 == x2 && y1 + 1 == y2) || (x1 - 1 == x2 && y1 - 2 == y2) || (x1 - 2 == x2 && y1 - 1 == y2) || (x1 + 1 == x2 && y1 - 2 == y2) || (x1 - 2 == x2 && y1 + 1 == y2) || (x1 - 1 == x2 && y1 + 2 == y2) || (x1 + 2 == x2 && y1 - 1 == y2)) {
-    } else {
-      return false;
-    }
+    game.board[ply.from.y][ply.from.x] = fromPiece;
+    game.board[ply.to.y][ply.to.x] = toPiece;
 
-  } else if (id == WBISHOP || id == BBISHOP) {
-
-    // Bishops move with equal changes in x and y but not passing over any other pieces
-    if (abs(x1 - x2) != abs(y1 - y2)) { return false; }
-    if (x1 > x2 && y1 > y2) {
-      int s;
-      int t;
-      for (s = x1 - 1, t = y1 - 1; s > x2; s--, t--) {
-        if (board[t][s] != BLANK_SPACE) { return false; }
-      }
-    } else if (x1 < x2 && y1 > y2) {
-      int s;
-      int t;
-      for (s = x1 + 1, t = y1 - 1; s < x2; s++, t--) {
-        if (board[t][s] != BLANK_SPACE) { return false; }
-      }
-    } else if (x1 < x2 && y1 < y2) {
-      int s;
-      int t;
-      for (s = x1 + 1, t = y1 + 1; s < x2; s++, t++) {
-        if (board[t][s] != BLANK_SPACE) { return false; }
-      }
-    } else if (x1 > x2 && y1 < y2) {
-      int s;
-      int t;
-      for (s = x1 - 1, t = y1 + 1; s > x2; s--, t++) {
-        if (board[t][s] != BLANK_SPACE) { return false; }
-      }
-    }
-
-  } else if (id == WROOK || id == BROOK) {
-
-    // Rooks move by changing x or y in any direction but not passing over any other pieces
-    if (x2 != x1 && y2 == y1) {  // row
-      if (x2 < x1) {
-        for (int i = x1 - 1; i > x2; i--) {
-          if (board[y1][i] != BLANK_SPACE) { return false; }
-        }
+    if (game.passantAlert) {
+      if (fromPiece == BPAWN) {
+        game.board[game.previousPly.to.y][game.previousPly.to.x] = WPAWN;
       } else {
-        for (int i = x1 + 1; i < x2; i++) {
-          if (board[y1][i] != BLANK_SPACE) { return false; }
-        }
-      };
-    } else if (x2 == x1 && y2 != y1) {  // column
-      if (y2 < y1) {
-        for (int i = y1 - 1; i > y2; i--) {
-          if (board[i][x1] != BLANK_SPACE) { return false; }
-        }
-      } else {
-        for (int i = y1 + 1; i < y2; i++) {
-          if (board[i][x1] != BLANK_SPACE) { return false; }
-        }
-      };
-    } else {
-      return false; /* not moved in only x OR y */
-    }
-
-  } else if (id == WQUEEN || id == BQUEEN) {
-
-    // Queens move in a combination of the rook and bishop's moves
-    if (x2 != x1 && y2 == y1) {  // row
-      if (x2 < x1) {
-        for (int i = x1 - 1; i > x2; i--) {
-          if (board[y1][i] != BLANK_SPACE) { return false; }
-        }
-      } else {
-        for (int i = x1 + 1; i < x2; i++) {
-          if (board[y1][i] != BLANK_SPACE) { return false; }
-        }
-      };
-    } else if (x2 == x1 && y2 != y1) {  // column //                       ROOK  MOVE
-      if (y2 < y1) {
-        for (int i = y1 - 1; i > y2; i--) {
-          if (board[i][x1] != BLANK_SPACE) { return false; }
-        }
-      } else {
-        for (int i = y1 + 1; i < y2; i++) {
-          if (board[i][x1] != BLANK_SPACE) { return false; }
-        }
-      };
-
-    } else if (abs(x1 - x2) == abs(y1 - y2)) {
-      if (x1 > x2 && y1 > y2) {
-        int s;
-        int t;
-        for (s = x1 - 1, t = y1 - 1; s > x2; s--, t--) {
-          if (board[t][s] != BLANK_SPACE) { return false; }
-        }
-      } else if (x1 < x2 && y1 > y2) {
-        int s;
-        int t;
-        for (s = x1 + 1, t = y1 - 1; s < x2; s++, t--) {
-          if (board[t][s] != BLANK_SPACE) { return false; }
-        }  // BISHOP  MOVE
-      } else if (x1 < x2 && y1 < y2) {
-        int s;
-        int t;
-        for (s = x1 + 1, t = y1 + 1; s < x2; s++, t++) {
-          if (board[t][s] != BLANK_SPACE) { return false; }
-        }
-      } else if (x1 > x2 && y1 < y2) {
-        int s;
-        int t;
-        for (s = x1 - 1, t = y1 + 1; s > x2; s--, t++) {
-          if (board[t][s] != BLANK_SPACE) { return false; }
-        }
+        game.board[game.previousPly.to.y][game.previousPly.to.x] = BPAWN;
       }
-
-    } else {
-      return false; /* not moved in only x OR y */
     }
 
+    // Restore king position if changed
+    if (fromPiece == WKING && oldKx != -1)
+        game.kingSquares[0] = { oldKx, oldKy };
+    else if (fromPiece == BKING && oldKx != -1)
+        game.kingSquares[1] = { oldKx, oldKy };
 
-  } else if (id == WKING || id == BKING) {
-    // The king can move a maximum of one in any direction
-    if (abs(x1 - x2) > 1 || abs(y1 - y2) > 1) { return false; }
-  }
-
-  // check if king is capturable after move
-
-  return true;  // return true if all checks say the move could be valid
+    return inCheck;
 }
+
+// // Checks if the move is valid, without checking if the king is in "check"
+// bool validMoveWithoutCheck(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]) {  //                             VALIDATE                    MOVE
+//   //                                            ^ en passant ^
+//   // Initial checks                   |--------------------------------(WHITE)-------------------------------------|      |---------------------------(BLACK)------------------------------|
+//   // |-check if first space blank-|   |->                                                                   <-(check if own capture)->                                                   <-|
+//   //   check if first space blank                                                                      check if own capture
+//   if (board[y1][x1] == BLANK_SPACE || (board[y1][x1] < BPAWN && board[y2][x2] < BPAWN && board[y2][x2] > BLANK_SPACE) || (board[y1][x1] > WKING && board[y2][x2] > WKING)) { return false; }
+
+//   // check if move is valid normally
+//   Piece id = board[y1][x1];
+
+//   if (id == WPAWN) {
+//     // The pawn has loads of move rules (e.g. en passant, first square 2 move rule, NO captures forwards...)
+//     if (((x1 == x2) && y2 + 1 == y1 && board[y1 - 1][x1] == BLANK_SPACE || (y1 == 6 && ((y2 + 2 == y1 && board[y1 - 1][x1] == BLANK_SPACE && board[y1 - 2][x1] == BLANK_SPACE) || y2 + 1 == y1 && board[y1 - 1][x1] == BLANK_SPACE)) && (x1 == x2)) || (abs(x1 - x2) == 1 && y2 + 1 == y1 && board[y2][x2] > WKING)) {
+//     } else if (
+//       abs(x1 - x2) == 1 && y2 + 1 == y1 && y1 == 3 /*&& board[y2+1][x2] > WKING*/ && previousPly.from.y == 1 && previousPly.to.x == x2 && previousPly.to.y == 3 && board[previousPly.to.y][previousPly.to.x] == BPAWN) {
+//       game.passantAlert = true;
+//     } else {
+//       return false;
+//     }
+
+
+//   } else if (id == BPAWN) {
+//     // The pawn has loads of move rules (e.g. en passant, first square 2 move rule, NO captures forwards...)
+//     if (((x1 == x2) && y2 - 1 == y1 && board[y1 + 1][x1] == BLANK_SPACE || (y1 == 1 && ((y2 - 2 == y1 && board[y1 + 1][x1] == BLANK_SPACE && board[y1 + 2][x1] == BLANK_SPACE) || y2 - 1 == y1 && board[y1 + 1][x1] == BLANK_SPACE)) && (x1 == x2)) || (abs(x1 - x2) == 1 && y2 - 1 == y1 && board[y2][x2] < BPAWN && board[y2][x2] > BLANK_SPACE)) {
+//     } else if (
+//       abs(x1 - x2) == 1 && y2 - 1 == y1 && y1 == 4 && previousPly.from.y == 6 && previousPly.to.x == x2 && previousPly.to.y == 4 && board[previousPly.to.y][previousPly.to.x] == WPAWN) {
+//       game.passantAlert = true;
+//     } else {
+//       return false;
+//     }
+
+//   } else if (id == WKNIGHT || id == BKNIGHT) {
+
+//     // Knights move by changing x or y by positive or negative 1 and 2
+//     // 8 possibilitites: (x+1, y+2)  (x+2, y+1)  (x-1, y-2)  (x-2, y-1)  (x+1, y-2)  (x-2, y+1)  (x-1, y+2)  (x+2, y-1)
+//     //               1                              2                              3                              4                              5                              6                              7                              8
+//     if ((x1 + 1 == x2 && y1 + 2 == y2) || (x1 + 2 == x2 && y1 + 1 == y2) || (x1 - 1 == x2 && y1 - 2 == y2) || (x1 - 2 == x2 && y1 - 1 == y2) || (x1 + 1 == x2 && y1 - 2 == y2) || (x1 - 2 == x2 && y1 + 1 == y2) || (x1 - 1 == x2 && y1 + 2 == y2) || (x1 + 2 == x2 && y1 - 1 == y2)) {
+//     } else {
+//       return false;
+//     }
+
+//   } else if (id == WBISHOP || id == BBISHOP) {
+
+//     // Bishops move with equal changes in x and y but not passing over any other pieces
+//     if (abs(x1 - x2) != abs(y1 - y2)) { return false; }
+//     if (x1 > x2 && y1 > y2) {
+//       int s;
+//       int t;
+//       for (s = x1 - 1, t = y1 - 1; s > x2; s--, t--) {
+//         if (board[t][s] != BLANK_SPACE) { return false; }
+//       }
+//     } else if (x1 < x2 && y1 > y2) {
+//       int s;
+//       int t;
+//       for (s = x1 + 1, t = y1 - 1; s < x2; s++, t--) {
+//         if (board[t][s] != BLANK_SPACE) { return false; }
+//       }
+//     } else if (x1 < x2 && y1 < y2) {
+//       int s;
+//       int t;
+//       for (s = x1 + 1, t = y1 + 1; s < x2; s++, t++) {
+//         if (board[t][s] != BLANK_SPACE) { return false; }
+//       }
+//     } else if (x1 > x2 && y1 < y2) {
+//       int s;
+//       int t;
+//       for (s = x1 - 1, t = y1 + 1; s > x2; s--, t++) {
+//         if (board[t][s] != BLANK_SPACE) { return false; }
+//       }
+//     }
+
+//   } else if (id == WROOK || id == BROOK) {
+
+//     // Rooks move by changing x or y in any direction but not passing over any other pieces
+//     if (x2 != x1 && y2 == y1) {  // row
+//       if (x2 < x1) {
+//         for (int i = x1 - 1; i > x2; i--) {
+//           if (board[y1][i] != BLANK_SPACE) { return false; }
+//         }
+//       } else {
+//         for (int i = x1 + 1; i < x2; i++) {
+//           if (board[y1][i] != BLANK_SPACE) { return false; }
+//         }
+//       };
+//     } else if (x2 == x1 && y2 != y1) {  // column
+//       if (y2 < y1) {
+//         for (int i = y1 - 1; i > y2; i--) {
+//           if (board[i][x1] != BLANK_SPACE) { return false; }
+//         }
+//       } else {
+//         for (int i = y1 + 1; i < y2; i++) {
+//           if (board[i][x1] != BLANK_SPACE) { return false; }
+//         }
+//       };
+//     } else {
+//       return false; /* not moved in only x OR y */
+//     }
+
+//   } else if (id == WQUEEN || id == BQUEEN) {
+
+//     // Queens move in a combination of the rook and bishop's moves
+//     if (x2 != x1 && y2 == y1) {  // row
+//       if (x2 < x1) {
+//         for (int i = x1 - 1; i > x2; i--) {
+//           if (board[y1][i] != BLANK_SPACE) { return false; }
+//         }
+//       } else {
+//         for (int i = x1 + 1; i < x2; i++) {
+//           if (board[y1][i] != BLANK_SPACE) { return false; }
+//         }
+//       };
+//     } else if (x2 == x1 && y2 != y1) {  // column //                       ROOK  MOVE
+//       if (y2 < y1) {
+//         for (int i = y1 - 1; i > y2; i--) {
+//           if (board[i][x1] != BLANK_SPACE) { return false; }
+//         }
+//       } else {
+//         for (int i = y1 + 1; i < y2; i++) {
+//           if (board[i][x1] != BLANK_SPACE) { return false; }
+//         }
+//       };
+
+//     } else if (abs(x1 - x2) == abs(y1 - y2)) {
+//       if (x1 > x2 && y1 > y2) {
+//         int s;
+//         int t;
+//         for (s = x1 - 1, t = y1 - 1; s > x2; s--, t--) {
+//           if (board[t][s] != BLANK_SPACE) { return false; }
+//         }
+//       } else if (x1 < x2 && y1 > y2) {
+//         int s;
+//         int t;
+//         for (s = x1 + 1, t = y1 - 1; s < x2; s++, t--) {
+//           if (board[t][s] != BLANK_SPACE) { return false; }
+//         }  // BISHOP  MOVE
+//       } else if (x1 < x2 && y1 < y2) {
+//         int s;
+//         int t;
+//         for (s = x1 + 1, t = y1 + 1; s < x2; s++, t++) {
+//           if (board[t][s] != BLANK_SPACE) { return false; }
+//         }
+//       } else if (x1 > x2 && y1 < y2) {
+//         int s;
+//         int t;
+//         for (s = x1 - 1, t = y1 + 1; s > x2; s--, t++) {
+//           if (board[t][s] != BLANK_SPACE) { return false; }
+//         }
+//       }
+
+//     } else {
+//       return false; /* not moved in only x OR y */
+//     }
+
+
+//   } else if (id == WKING || id == BKING) {
+//     // The king can move a maximum of one in any direction
+//     if (abs(x1 - x2) > 1 || abs(y1 - y2) > 1) { return false; }
+//   }
+
+//   // check if king is capturable after move
+
+//   return true;  // return true if all checks say the move could be valid
+// }
 
 // Updates a copy of the chess board
-void updateHypothetical(Piece from[8][8]) {
-  for (int y = 0; y < 8; y++) {
-    for (int x = 0; x < 8; x++) {
-      game.hypotheticalBoard[y][x] = from[y][x];
-    }
-  }
-}
+// void updateHypothetical(Piece from[8][8]) {
+//   for (int y = 0; y < 8; y++) {
+//     for (int x = 0; x < 8; x++) {
+//       game.hypotheticalBoard[y][x] = from[y][x];
+//     }
+//   }
+// }
 
 // Finds the king on the given board
 struct Square findKing(Piece board[8][8]) {
@@ -752,20 +866,20 @@ uint8_t countPossibleMoves(Ply previousPly, Ply selectedPly, Piece board[8][8]) 
 }
 
 // Counts all the possible moves all pieces can play
-uint8_t countAllPossibleMoves(Ply previousPly, bool turn, Piece board[8][8]) {
+uint8_t countAllPossibleMoves(struct GameState &game) {
   uint8_t numberOfMoves = 0;
   bool passantBefore = game.passantAlert;
   bool castleBefore = game.castleAlert;
 
   for (int y1 = 0;y1<8;y1++) {
     for (int x1 = 0;x1<8;x1++) {
-      if (( turn == 0 && (board[y1][x1] > WKING || board[y1][x1] == BLANK_SPACE) ) || ( turn == 1 && board[y1][x1] < BPAWN)) {
+      if (( game.turn == 0 && (game.board[y1][x1] > WKING || game.board[y1][x1] == BLANK_SPACE) ) || ( game.turn == 1 && game.board[y1][x1] < BPAWN)) {
         continue;
       }
 
       for (int y2 = 0; y2 < 8; y2++) {
         for (int x2 = 0; x2 < 8; x2++) {
-          if (validMove(x1, y1, x2, y2, previousPly, board)) {
+          if (validMove(x1, y1, x2, y2, game.previousPly, game.board)) {
             numberOfMoves++;
             game.passantAlert = passantBefore;
             game.castleAlert = castleBefore;   // reset flags for every move, preventing untrackable errors
@@ -779,29 +893,8 @@ uint8_t countAllPossibleMoves(Ply previousPly, bool turn, Piece board[8][8]) {
   return numberOfMoves;
 }
 
-
-// // Generates a optimized snapshot of the given position, used for three-fold repetition
-// struct Position generatePosition(Ply previousPly, Piece board[8][8], bool turn) {
-
-//   struct Position newPosition = { 0 };
-//   for (int y = 0;y<8;y++) {
-//     newPosition.rows[y].a = board[y][0];
-//     newPosition.rows[y].b = board[y][1];
-//     newPosition.rows[y].c = board[y][2];
-//     newPosition.rows[y].d = board[y][3];
-//     newPosition.rows[y].e = board[y][4];
-//     newPosition.rows[y].f = board[y][5];
-//     newPosition.rows[y].g = board[y][6];
-//     newPosition.rows[y].h = board[y][7];
-//   }
-//   newPosition.availableMoves = countAllPossibleMoves(previousPly, turn, board);
-//   newPosition.turn = turn;
-
-//   return newPosition;
-// }
-
 // Resets the position storage for the gamestate instance
-void resetPositionStorage(struct GameState &gameState) {
+void resetHashStorage(struct GameState &gameState) {
   memset(gameState.lastHashs, 0, sizeof(gameState.lastHashs)); // sets the 100 position storage to 0
   gameState.currentPosition = 0;                                  // points to the first position slot
 }
@@ -827,15 +920,15 @@ bool checkForThreeFoldRepetition(const struct GameState &gameState) {
 }
 
 // Test the board for checkmate, draw, and both
-bool checkForCheckmate(Ply lastPly, bool turn, Piece board[8][8]) {
+bool checkForCheckmate(struct GameState &game) {
 
-  if (countAllPossibleMoves(lastPly, turn, board) == 0 && checkForCheck(lastPly, board)) {
+  if (countAllPossibleMoves(game) == 0 && checkForCheck(game)) {
     return true;
   }
   return false;
 }
 // Check for insufficient material by FIDE regulation
-bool checkForInsufficientMaterial(Piece board[8][8]) {
+bool checkForInsufficientMaterial(const struct GameState &game) {
   bool whiteKnight = false;
   bool blackKnight = false;
   bool whiteBishop = false;
@@ -845,7 +938,7 @@ bool checkForInsufficientMaterial(Piece board[8][8]) {
 
   for (int r = 0; r < 8; r++) {
     for (int c =  0; c < 8; c++) {
-      Piece p = board[r][c];
+      Piece p = game.board[r][c];
 
       switch (p) {
         case WPAWN:
@@ -905,18 +998,18 @@ bool checkForInsufficientMaterial(Piece board[8][8]) {
   
   return false;
 }
-bool check50MoveRule(GameState gameState) {
-  if (gameState.plyClock >= 100) {
+bool check50MoveRule(const struct GameState &game) {
+  if (game.plyClock >= 100) {
     return true;
   }
   return false;
 }
-bool checkForDraw(Ply lastPly, bool turn, Piece board[8][8]) {
-  if (countAllPossibleMoves(lastPly, turn, board) == 0) {
+bool checkForDraw(struct GameState &game) {
+  if (countAllPossibleMoves(game) == 0) {
     return true;
   } 
 
-  if (checkForInsufficientMaterial(board)) {
+  if (checkForInsufficientMaterial(game)) {
     return true;
   }
 
@@ -931,8 +1024,8 @@ bool checkForDraw(Ply lastPly, bool turn, Piece board[8][8]) {
   // three-fold repetition should be added
   return false;
 }
-bool checkForGameOver(Ply lastPly, bool turn, Piece board[8][8]) {
-  if (checkForDraw(lastPly, turn, board) || checkForCheckmate(lastPly, turn, board)) {
+bool checkForGameOver(struct GameState &game) {
+  if (checkForDraw(game) || checkForCheckmate(game)) {
     return true;
   }
   return false;
@@ -957,6 +1050,13 @@ void playMove(Ply ply, Piece from[8][8]) {
   } else if (from[ply.from.y][ply.from.x] == BKING && ply.from.x == 4 && ply.from.y == 0) {
     game.blackKingHasMoved = true;
   }
+  if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING) {
+      game.kingSquares[0].x = game.selectedPly.to.x;
+      game.kingSquares[0].y = game.selectedPly.to.y;
+    } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING) {
+      game.kingSquares[1].x = game.selectedPly.to.x;
+      game.kingSquares[1].y = game.selectedPly.to.y;
+    }
 
   if (from[ply.from.y][ply.from.x] == WPAWN && ply.to.y == 0) {
     if (ply.to.promo==3) {
@@ -987,10 +1087,22 @@ void playMove(Ply ply, Piece from[8][8]) {
     }
   }
 
+  // Update plyClock
+    if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN || !(game.board[game.selectedPly.to.y][game.selectedPly.to.x] == BLANK_SPACE)) {
+      game.plyClock = 0;
+      resetHashStorage(game);
+    } else {
+      game.plyClock++;
+    }
+
   from[ply.to.y][ply.to.x] = from[ply.from.y][ply.from.x];
   from[ply.from.y][ply.from.x] = BLANK_SPACE;
 
-
+// Add position state to the storage
+  if (game.currentPosition < THREE_FOLD_REPETITION_MAX_PLY) { // make sure we do not go out of bounds due to logic error with 50 move rule
+    game.lastHashs[game.currentPosition] = generateZobristHash(game, countAllPossibleMoves(game));
+    game.currentPosition++;
+  } 
 
   if (game.passantAlert == true) {
     game.passantAlert = false;

@@ -4,13 +4,7 @@
 /*
 
     TODO:
-
-  Button navigation
-  Display wins and draws in the notation
-  Draw by insufficient material
-  50-move rule
-  Testing and optimizations, particularly around the newly implemented updateSquare() function
-  Three-fold repition rule. (Represent the board state as a 33-byte array and compare against the previous 50 board states: use implementation of 50-move rule)
+  Testing and optimizations
 
   Version 3
   Chess AI
@@ -197,12 +191,12 @@ void loop() {
             }
           }
 
-          handleMove();
+          handleMove(game);
 
         } else if (game.selectingPiece) {  //----- First press on screen
           Serial.println("Selecting piece = true");
           printBoard(game.board);
-          if (checkForGameOver(game.previousPly, game.turn, game.board)) {
+          if (checkForGameOver(game)) {
             // Game over?
           } else if (((game.board[sy][sx] < BPAWN && game.turn == 0) || (game.board[sy][sx] > WKING && game.turn == 1))) {
             game.selectedPly.from.x = sx;
@@ -226,17 +220,17 @@ void loop() {
           game.selectedPly.to.y = sy;
 
           if (validMove(game.selectedPly.from.x, game.selectedPly.from.y, game.selectedPly.to.x, game.selectedPly.to.y, game.previousPly, game.board)) {
-            if (checkAttemptedPromotion()) {
+            if (checkAttemptedPromotion(game)) {
               displayPromotionMenu();
               game.promotingPiece = true;
 
             } else {
-              handleMove();
+              handleMove(game);
             }
 
           } else {
             Color color;
-            if (checkForCheck(game.previousPly, game.board) && ((game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING))) {
+            if (checkForCheck(game) && ((game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING))) {
               color = RED;
             } else if (game.selectedPly.from.x == game.previousPly.to.x && game.selectedPly.from.y == game.previousPly.to.y) {
               color = LIGHT_OLIVE;
@@ -283,7 +277,16 @@ void loop() {
     }
 
   } else {
-    if (notation.states.up && validDelay()) {
+    updateNotationButtons();
+  }
+}
+
+
+// ====== Encapsulation functions ======
+
+// redraws the buttons as unpressed after the delay has passed
+void updateNotationButtons() {
+  if (notation.states.up && validDelay()) {
       notation.states.up = false;
       drawUpButton(NOTATION_BACK, NOTATION_FRONT);
     }
@@ -291,10 +294,7 @@ void loop() {
       notation.states.down = false;
       drawDownButton(NOTATION_BACK, NOTATION_FRONT);
     }
-  }
 }
-
-
 
 
 // ====== Input helper functions ======
