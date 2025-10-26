@@ -22,21 +22,6 @@ constexpr Piece initialBoard[8][8] PROGMEM = {
   {       WROOK,     WKNIGHT,     WBISHOP,      WQUEEN,       WKING,     WBISHOP,     WKNIGHT,       WROOK }
 };
 
-constexpr Piece testBoard[8][8] PROGMEM = {
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, WKING, BLANK_SPACE },
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE },
-  { WKING, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE },
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BBISHOP, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE },
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, WBISHOP },
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE },
-  { BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, BPAWN, BLANK_SPACE },
-  { WKING, BLANK_SPACE, BKING, BLANK_SPACE, BLANK_SPACE, BLANK_SPACE, WKING, BLANK_SPACE }
-};
-
-
-
-
-
 
 
 extern struct GameState game; // Global game state
@@ -45,17 +30,16 @@ extern struct GameState game; // Global game state
 
 void initGameState();
 
-bool checkAttemptedPromotion(struct GameState &game);
+bool checkAttemptedPromotion(const struct GameState &game);
 void handleMove(struct GameState &game);
 bool validMove(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]);
 bool inBounds(int8_t x, int8_t y);
 bool isEnemy(Piece p, bool turn);
 bool checkForCheck(struct GameState &game);
 bool checkForCheckAfterPly(const struct Ply ply, struct GameState &game);
-bool validMoveWithoutCheck(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]);
-// void updateHypothetical(Piece from[8][8]);
+// bool validMoveWithoutCheck(int x1, int y1, int x2, int y2, Ply previousPly, Piece board[8][8]);
 void fillBoard(Piece from[8][8]);
-struct Square findKing(Piece board[8][8]);
+struct Square findKing(const Piece board[8][8], const bool turn);
 uint8_t countPossibleMoves(Ply previousPly, Ply selectedPly, Piece board[8][8]);
 uint8_t countAllPossibleMoves(struct GameState &game);
 

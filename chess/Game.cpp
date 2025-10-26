@@ -36,7 +36,7 @@ void initGameState() {
 
   //            white          |             black
 
-  game.kingSquares[0] = {7,4,0}; game.kingSquares[1] = {0,4,0};
+  game.kingSquares[0] = {4,7,0}; game.kingSquares[1] = {4,0,0};
 
   // King-movement flags, used to check castling validity
   game.whiteKingHasMoved = false;
@@ -59,7 +59,7 @@ void initGameState() {
 }
 
 // Check if the move just played was a promotion
-bool checkAttemptedPromotion(struct GameState &game) {
+bool checkAttemptedPromotion(const struct GameState &game) {
   return (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN && game.selectedPly.to.y == 0) || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN && game.selectedPly.to.y == 7);
 }
 
@@ -73,7 +73,7 @@ void handleMove(struct GameState &game) {
     //Check if previously was in check and save location if so
     struct Square prevKingLocation = {0,0,3};
     if (checkForCheck(game)) {
-      prevKingLocation = findKing(game.board);
+      prevKingLocation = findKing(game.board, game.turn);
     }
 
     game.turn = (game.turn == 0) ? 1 : 0;  // flip the turn value
@@ -205,7 +205,7 @@ void handleMove(struct GameState &game) {
 
     // Add red effect if in 'check'
     if (checkForCheck(game)) {
-      struct Square kingLocation = findKing(game.board);
+      struct Square kingLocation = findKing(game.board, game.turn);
 
       tft.fillRect(BOARD_BUFFER + (kingLocation.x) * SQUARE_SIZE, (kingLocation.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, RED);
       drawPiece(game.board[kingLocation.y][kingLocation.x], kingLocation.x, kingLocation.y);
@@ -557,7 +557,7 @@ inline bool inBounds(int8_t x, int8_t y) {
   return (x >= 0 && x <= 7 && y >= 0 && y <= 7);
 }
 inline bool isEnemy(Piece p, bool turn) {
-  return (!turn && p < BPAWN && p != BLANK_SPACE) || (turn && p > WKING);
+  return (!turn && p > WKING && p != BLANK_SPACE) || (turn && p < BPAWN && p != BLANK_SPACE);
 }
 
 bool checkForCheck(struct GameState &game) {
@@ -829,8 +829,8 @@ bool checkForCheckAfterPly(const struct Ply ply, struct GameState &game) {
 // }
 
 // Finds the king on the given board
-struct Square findKing(Piece board[8][8]) {
-  uint8_t king = (game.turn == 0) ? WKING : BKING;  // Set the king's piece based on the turn
+struct Square findKing(const Piece board[8][8], const bool turn) {
+  uint8_t king = (turn == 0) ? WKING : BKING;  // Set the king's piece based on the turn
   for (uint8_t y = 0; y < 8; y++) {
     for (uint8_t x = 0; x < 8; x++) {
       if (board[y][x] == king) {

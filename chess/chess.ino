@@ -5,6 +5,7 @@
 
     TODO:
   Testing and optimizations
+  Split the main functions into sub-divided sections (remove that hellish looking nested mess)
 
   Version 3
   Chess AI
@@ -44,8 +45,8 @@ void setup() {
   tft.begin(identifier);
 
   pinMode(SD_SCK_PIN, OUTPUT);
-  // pinMode(XM, OUTPUT);
-  // pinMode(YP, OUTPUT);
+  pinMode(XM, OUTPUT);
+  pinMode(YP, OUTPUT);
 
   tft.setRotation(1);
   tft.fillScreen(BLACK);
@@ -64,217 +65,53 @@ void loop() {
   p = ts.getPoint();             // Poll the latest TSPoint instance
   digitalWrite(SD_SCK_PIN, LOW);
 
-
-  pinMode(XM, OUTPUT);
+  pinMode(XM, OUTPUT); // ensure the pin directions are correct after polling
   pinMode(YP, OUTPUT);
   
   // Check that the pressure is enough to be considered a press
   if (validPress(p.z)) {
-    // Serial.print(p.x);Serial.print(" ");Serial.println(p.y);
+
     int p_x = 330 - map(p.y, TS_MINY, TS_MAXY, 0, 320);
-    int p_y = map(p.x, TS_MINX, TS_MAXX, 240, 0);
-    // Serial.print(p_x);Serial.print(" ");Serial.println(p_y);
-    if (validDelay()) {
+    int p_y = map(p.x, TS_MINX, TS_MAXX, 240, 0);      // map the coords to better values
+
+    if (validDelay()) { // if it has been long enough to consider it a press
       lastPress = millis();
-      // sx,sy refer to the coords of the square related to the board; nx,ny refer to the promotion square if relevent
+
+      // sx,sy refer to the coords of the square related to the board
       if (pressedBoard(p_x, p_y)) {
-        struct Square square = findSquareFromScreenPos(p_x, p_y);
+        struct Square square = findSquareFromScreenPos(p_x, p_y);// get the square for the last press
 
-        uint8_t sx = square.x;
-        uint8_t sy = square.y;
-        Serial.println("X: " + static_cast<String>(sx) + " | Y: " + static_cast<String>(sy));
+        // Serial.println("X: " + static_cast<String>(square.x) + " | Y: " + static_cast<String>(square.y));
 
-        if (game.promotingPiece) {
+        if (game.promotingPiece) { // if the promotion menu is being displayed
           game.promotingPiece = false;
-          uint8_t nx = sx;
-          uint8_t ny = sy;
-          Color color;
+          runPromotingPiece(square, game);
+          
 
-          if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN) {
-            if ((game.selectedPly.to.x + game.selectedPly.to.y) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y);
+        } else if (game.selectingPiece) {  // first press for the current ply
+          
+          runFirstPress(square, game);
 
-            if ((game.selectedPly.to.x + game.selectedPly.to.y + 1) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 1) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y + 1][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 1);
-
-            if ((game.selectedPly.to.x + game.selectedPly.to.y + 2) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 2) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y + 2][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 2);
-
-            if ((game.selectedPly.to.x + game.selectedPly.to.y + 3) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 3) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y + 3][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 3);
-          } else {
-            if ((game.selectedPly.to.x + game.selectedPly.to.y) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y);
-
-            if ((game.selectedPly.to.x + game.selectedPly.to.y - 1) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 1) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y - 1][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 1);
-
-            if ((game.selectedPly.to.x + game.selectedPly.to.y - 2) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 2) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y - 2][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 2);
-
-            if ((game.selectedPly.to.x + game.selectedPly.to.y - 3) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 3) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.to.y - 3][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 3);
-          }
-
-
-          // Interpretation of the promotion
-          if (nx != game.selectedPly.to.x || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN && ny >= 4) || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN && ny <= 3)) {
-            game.cancelPromotion = true; /* user did not press a square or pressed a square on the wrong column or wrong row */
-
-          } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN) {
-            if (ny == 0) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WQUEEN;  // Directly changes the pawn to the piece ; see first line after promote menu
-              game.selectedPly.to.promo = 3;
-            } else if (ny == game.selectedPly.to.y + 1) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WROOK;
-              game.selectedPly.to.promo = 2;
-            } else if (ny == game.selectedPly.to.y + 2) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WBISHOP;
-              game.selectedPly.to.promo = 1;
-            } else if (ny == game.selectedPly.to.y + 3) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WKNIGHT;
-              game.selectedPly.to.promo = 0;
-            }
-          } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN) {
-            if (ny == game.selectedPly.to.y) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BQUEEN;  // Directly changes the pawn to the piece ; see first line after promote menu
-              game.selectedPly.to.promo = 3;
-            } else if (ny == game.selectedPly.to.y - 1) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BROOK;
-              game.selectedPly.to.promo = 2;
-            } else if (ny == game.selectedPly.to.y - 2) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BBISHOP;
-              game.selectedPly.to.promo = 1;
-            } else if (ny == game.selectedPly.to.y - 3) {
-              game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BKNIGHT;
-              game.selectedPly.to.promo = 0;
-            }
-          }
-
-          handleMove(game);
-
-        } else if (game.selectingPiece) {  //----- First press on screen
-          Serial.println("Selecting piece = true");
-          printBoard(game.board);
-          if (checkForGameOver(game)) {
-            // Game over?
-          } else if (((game.board[sy][sx] < BPAWN && game.turn == 0) || (game.board[sy][sx] > WKING && game.turn == 1))) {
-            game.selectedPly.from.x = sx;
-            game.selectedPly.from.y = sy;
-            if (!(game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BLANK_SPACE)) {
-              Serial.println("here");
-
-              draw_possible_moves(game.previousPly, game.selectedPly, game.board);
-
-              tft.fillRect(BOARD_BUFFER + sx * SQUARE_SIZE, sy * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, KHAKI);
-              drawPiece(game.board[sy][sx], sx, sy);
-              game.selectingPiece = false;
-            }
-          }
-
-        } else {  //----- Second press on screen
-          Serial.println("Selecting piece = false");
-
-          delete_possible_moves(game.previousPly, game.selectedPly, game.board);
-          game.selectedPly.to.x = sx;
-          game.selectedPly.to.y = sy;
-
-          if (validMove(game.selectedPly.from.x, game.selectedPly.from.y, game.selectedPly.to.x, game.selectedPly.to.y, game.previousPly, game.board)) {
-            if (checkAttemptedPromotion(game)) {
-              displayPromotionMenu();
-              game.promotingPiece = true;
-
-            } else {
-              handleMove(game);
-            }
-
-          } else {
-            Color color;
-            if (checkForCheck(game) && ((game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING))) {
-              color = RED;
-            } else if (game.selectedPly.from.x == game.previousPly.to.x && game.selectedPly.from.y == game.previousPly.to.y) {
-              color = LIGHT_OLIVE;
-            } else if ((game.selectedPly.from.x + game.selectedPly.from.y) % 2 == 1) {
-              color = DARK_BROWN;
-            } else {
-              color = LIGHT_BROWN;
-            }
-            tft.fillRect(BOARD_BUFFER + (game.selectedPly.from.x) * SQUARE_SIZE, (game.selectedPly.from.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
-            drawPiece(game.board[game.selectedPly.from.y][game.selectedPly.from.x], game.selectedPly.from.x, game.selectedPly.from.y);
-          }
+        } else {  // second press for the current ply
+          runSecondPress(square, game);
           game.selectingPiece = true;
         }
+
       } else if (pressedButton(p_x, p_y) > 0) {
-        uint8_t button = pressedButton(p_x, p_y);
-
-        if (button == 1) {
-          notation.states.up = true;
-          drawButtons();
-          if (notation.notationPaneNo > 0) {
-            notation.notationPaneNo -= 1;
-            drawNotation();
-          }
-        } else if (button == 2) {
-          notation.states.down = true;
-          drawButtons();
-          if (notation.notationPaneNo < ((notation.currentPlyNumber > 0 ? (notation.currentPlyNumber - 1) / 2 : 0) )/MAX_LINES_PER_PANE) {
-            notation.notationPaneNo += 1;
-            drawNotation();
-          }
-        }
+        runButtons(p_x, p_y, notation);
       }
-    } else if (pressedButton(p_x, p_y) > 0) {
+    } // else if (pressedButton(p_x, p_y) > 0) {
     
-      uint8_t button = pressedButton(p_x, p_y);
+    //   uint8_t button = pressedButton(p_x, p_y);
 
-      if (button == 1) {
-        notation.states.up = true;
+    //   if (button == 1) {
+    //     notation.states.up = true;
         
-      } else if (button == 2) {
-        notation.states.down = true;
+    //   } else if (button == 2) {
+    //     notation.states.down = true;
         
-      }
-    }
+    //   }
+    // }
 
   } else {
     updateNotationButtons();
@@ -283,6 +120,192 @@ void loop() {
 
 
 // ====== Encapsulation functions ======
+
+// runs when the screen has been pressed if and the promotion menu is displaying 
+void runPromotingPiece(struct Square &square, struct GameState &game) {
+  // nx, ny are the promotion square coords being looked at promotion 
+  uint8_t nx = square.x;
+  uint8_t ny = square.y;
+  Color color;
+
+  if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN) { // if its white's turn
+  // individually update and every square in the promotion menu return to the proper piece
+    if ((game.selectedPly.to.x + game.selectedPly.to.y) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y + 1) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 1) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y + 1][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 1);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y + 2) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 2) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y + 2][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 2);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y + 3) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y + 3) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y + 3][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y + 3);
+
+  } else { // if it's blacks turn
+    if ((game.selectedPly.to.x + game.selectedPly.to.y) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y - 1) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 1) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y - 1][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 1);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y - 2) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 2) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y - 2][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 2);
+
+    if ((game.selectedPly.to.x + game.selectedPly.to.y - 3) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.to.x) * SQUARE_SIZE, (game.selectedPly.to.y - 3) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.to.y - 3][game.selectedPly.to.x], game.selectedPly.to.x, game.selectedPly.to.y - 3);
+  }
+
+
+  // Interpretation of the promotion
+  if (nx != game.selectedPly.to.x || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN && ny >= 4) || (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN && ny <= 3)) {
+    game.cancelPromotion = true; /* user did not press a square or pressed a square on the wrong column or wrong row */
+
+  } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WPAWN) {
+    if (ny == 0) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WQUEEN;  // Directly changes the pawn to the piece ; see first line after promote menu
+      game.selectedPly.to.promo = 3;
+    } else if (ny == game.selectedPly.to.y + 1) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WROOK;
+      game.selectedPly.to.promo = 2;
+    } else if (ny == game.selectedPly.to.y + 2) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WBISHOP;
+      game.selectedPly.to.promo = 1;
+    } else if (ny == game.selectedPly.to.y + 3) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = WKNIGHT;
+      game.selectedPly.to.promo = 0;
+    }
+  } else if (game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BPAWN) {
+    if (ny == game.selectedPly.to.y) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BQUEEN;  // Directly changes the pawn to the piece ; see first line after promote menu
+      game.selectedPly.to.promo = 3;
+    } else if (ny == game.selectedPly.to.y - 1) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BROOK;
+      game.selectedPly.to.promo = 2;
+    } else if (ny == game.selectedPly.to.y - 2) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BBISHOP;
+      game.selectedPly.to.promo = 1;
+    } else if (ny == game.selectedPly.to.y - 3) {
+      game.board[game.selectedPly.from.y][game.selectedPly.from.x] = BKNIGHT;
+      game.selectedPly.to.promo = 0;
+    }
+  }
+
+  handleMove(game);
+}
+
+// run first press on the screen
+void runFirstPress(struct Square &square, struct GameState &game) {
+  Serial.println();
+  printBoard(game.board);
+  Serial.println(static_cast<String>(game.kingSquares[0].x) + " " + static_cast<String>(game.kingSquares[0].y) + " " + static_cast<String>(game.kingSquares[1].x) + " " + static_cast<String>(game.kingSquares[1].y));
+  Serial.println();
+  if (checkForGameOver(game)) {
+    // Game over?
+  } else if (((game.board[square.y][square.x] < BPAWN && game.turn == 0) || (game.board[square.y][square.x] > WKING && game.turn == 1))) {
+    game.selectedPly.from.x = square.x;
+    game.selectedPly.from.y = square.y;
+    if (!(game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BLANK_SPACE)) {
+
+      draw_possible_moves(game.previousPly, game.selectedPly, game.board);
+
+      tft.fillRect(BOARD_BUFFER + square.x * SQUARE_SIZE, square.y * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, KHAKI);
+      drawPiece(game.board[square.y][square.x], square.x, square.y);
+      game.selectingPiece = false;
+    }
+  }
+}
+
+void runSecondPress(struct Square &square, struct GameState &game) {
+  delete_possible_moves(game.previousPly, game.selectedPly, game.board);
+  game.selectedPly.to.x = square.x;
+  game.selectedPly.to.y = square.y;
+
+  if (validMove(game.selectedPly.from.x, game.selectedPly.from.y, game.selectedPly.to.x, game.selectedPly.to.y, game.previousPly, game.board)) {
+    if (checkAttemptedPromotion(game)) {
+      displayPromotionMenu();
+      game.promotingPiece = true;
+
+    } else {
+      handleMove(game);
+    }
+
+  } else {
+    Color color;
+    if (checkForCheck(game) && ((game.board[game.selectedPly.from.y][game.selectedPly.from.x] == BKING || game.board[game.selectedPly.from.y][game.selectedPly.from.x] == WKING))) {
+      color = RED;
+    } else if (game.selectedPly.from.x == game.previousPly.to.x && game.selectedPly.from.y == game.previousPly.to.y) {
+      color = LIGHT_OLIVE;
+    } else if ((game.selectedPly.from.x + game.selectedPly.from.y) % 2 == 1) {
+      color = DARK_BROWN;
+    } else {
+      color = LIGHT_BROWN;
+    }
+    tft.fillRect(BOARD_BUFFER + (game.selectedPly.from.x) * SQUARE_SIZE, (game.selectedPly.from.y) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE, color);
+    drawPiece(game.board[game.selectedPly.from.y][game.selectedPly.from.x], game.selectedPly.from.x, game.selectedPly.from.y);
+  }
+}
+
+// runs the relevent operation if one of the other buttons are pressed
+void runButtons(int p_x, int p_y, struct NotationState &notation) {
+  uint8_t button = pressedButton(p_x, p_y);
+
+  if (button == 1) {
+    notation.states.up = true;
+    drawButtons();
+    if (notation.notationPaneNo > 0) {
+      notation.notationPaneNo -= 1;
+      drawNotation();
+    }
+  } else if (button == 2) {
+    notation.states.down = true;
+    drawButtons();
+    if (notation.notationPaneNo < ((notation.currentPlyNumber > 0 ? (notation.currentPlyNumber - 1) / 2 : 0) )/MAX_LINES_PER_PANE) {
+      notation.notationPaneNo += 1;
+      drawNotation();
+    }
+  }
+}
 
 // redraws the buttons as unpressed after the delay has passed
 void updateNotationButtons() {
