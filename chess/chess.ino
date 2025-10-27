@@ -29,7 +29,7 @@
 
 TSPoint p;
 
-
+// Setup of the main data singletons and the touchscreen
 void setup() {
 
   // Set up the global game struct
@@ -67,54 +67,47 @@ void loop() {
 
   pinMode(XM, OUTPUT); // ensure the pin directions are correct after polling
   pinMode(YP, OUTPUT);
+  int p_x = 330 - map(p.y, TS_MINY, TS_MAXY, 0, 320);
+  int p_y = map(p.x, TS_MINX, TS_MAXX, 240, 0);      // map the coords to better values
+
+  if (pressedButton(p_x, p_y) > 0) {
+    runButtons(p_x, p_y, notation);
+  }  
+
+  if (!validDelay()) { // if it has been long enough to consider it a press
+    return;
+  }
+
+  updateNotationButtons();
   
-  // Check that the pressure is enough to be considered a press
-  if (validPress(p.z)) {
+  if (!validPress(p.z)) { // Check that the pressure is enough to be considered a press
+    return;
+  }
+  
 
-    int p_x = 330 - map(p.y, TS_MINY, TS_MAXY, 0, 320);
-    int p_y = map(p.x, TS_MINX, TS_MAXX, 240, 0);      // map the coords to better values
+  lastPress = millis(); // (the screen has been pressed, update this to prevent accidental multiple presses)
 
-    if (validDelay()) { // if it has been long enough to consider it a press
-      lastPress = millis();
 
-      // sx,sy refer to the coords of the square related to the board
-      if (pressedBoard(p_x, p_y)) {
-        struct Square square = findSquareFromScreenPos(p_x, p_y);// get the square for the last press
+  if (!pressedBoard(p_x, p_y)) { // if the board has not been pressed, leave
+    return;
+  }
 
-        // Serial.println("X: " + static_cast<String>(square.x) + " | Y: " + static_cast<String>(square.y));
+  struct Square square = findSquareFromScreenPos(p_x, p_y);// get the square for the last press
 
-        if (game.promotingPiece) { // if the promotion menu is being displayed
-          game.promotingPiece = false;
-          runPromotingPiece(square, game);
-          
+  // Serial.println("X: " + static_cast<String>(square.x) + " | Y: " + static_cast<String>(square.y));
 
-        } else if (game.selectingPiece) {  // first press for the current ply
-          
-          runFirstPress(square, game);
-
-        } else {  // second press for the current ply
-          runSecondPress(square, game);
-          game.selectingPiece = true;
-        }
-
-      } else if (pressedButton(p_x, p_y) > 0) {
-        runButtons(p_x, p_y, notation);
-      }
-    } // else if (pressedButton(p_x, p_y) > 0) {
+  if (game.promotingPiece) { // if the promotion menu is being displayed
+    game.promotingPiece = false;
+    runPromotingPiece(square, game);
     
-    //   uint8_t button = pressedButton(p_x, p_y);
 
-    //   if (button == 1) {
-    //     notation.states.up = true;
-        
-    //   } else if (button == 2) {
-    //     notation.states.down = true;
-        
-    //   }
-    // }
+  } else if (game.selectingPiece) {  // first press for the current ply
+    
+    runFirstPress(square, game);
 
-  } else {
-    updateNotationButtons();
+  } else {  // second press for the current ply
+    runSecondPress(square, game);
+    game.selectingPiece = true;
   }
 }
 
@@ -328,12 +321,12 @@ bool validDelay() {
 }
 
 // Check that the given pressure is enough to be considered a press
-bool validPress(int16_t z) {
+bool validPress(const int16_t z) {
   return (z > MINPRESSURE && z < MAXPRESSURE);
 }
 
 // Poll on-screen buttons for presses; NO OVERLAPPING BUTTONS
-uint8_t pressedButton(uint16_t p_x, uint16_t p_y) {
+uint8_t pressedButton(const uint16_t p_x, const uint16_t p_y) {
   if(p_x>=22 && p_x<=57 && p_y>=208 && p_y<=221) {
     return 1; // Up button pressed
   }
@@ -345,14 +338,16 @@ uint8_t pressedButton(uint16_t p_x, uint16_t p_y) {
 }
 
 // Check if the chess board has been pressed given the input coordinates
-bool pressedBoard(int p_x, int p_y) {
+bool pressedBoard(const int p_x, const int p_y) {
   return p_x > BOARD_BUFFER;
 }
 // Finds the square on the chess board.    DOES NOT CHECK IF THE CHESS BOARD IS PRESSED -> will return 0,0 if invalid
-struct Square findSquareFromScreenPos(int p_x, int p_y) {
-  struct Square square = { 0, 0 };
+struct Square findSquareFromScreenPos(const int p_x, const int p_y) {
+  struct Square square = { 0, 0, 3 };
   int x;
   int y;
+
+  // sx,sy refer to the coords of the square related to the board
   for (int sy = 0; sy < 8; sy += 1) {
     for (int sx = 0; sx < 8; sx += 1) {
 
@@ -361,6 +356,7 @@ struct Square findSquareFromScreenPos(int p_x, int p_y) {
       if (x < p_x - 5 && y < p_y + 5 && x + SQUARE_SIZE > p_x - 5 && y + SQUARE_SIZE > p_y + 5) {
         square.x = sx;
         square.y = sy;
+        square.promo = 0;
         break;
       }
     }
